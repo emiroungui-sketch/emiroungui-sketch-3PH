@@ -1,0 +1,172 @@
+// Serveur "Questions pour un Champion" : sert le jeu + relaie les messages des salons.
+// Lancement : npm install && npm start  →  http://localhost:3000
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const { WebSocketServer } = require("ws");
+
+const PORT = process.env.PORT || 3000;
+const MAX_PLAYERS_PER_ROOM = 12;
+
+// Seuls ces fichiers sont servis
+const FILES = {
+  "/": ["index.html", "text/html; charset=utf-8"],
+  "/index.html": ["index.html", "text/html; charset=utf-8"],
+  "/style.css": ["style.css", "text/css; charset=utf-8"],
+  "/script.js": ["script.js", "text/javascript; charset=utf-8"]
+};
+
+const server = http.createServer((req, res) => {
+  const url = (req.url || "/").split("?")[0];
+  const entry = FILES[url];
+  if (!entry) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Introuvable");
+    return;
+  }
+  fs.readFile(path.join(__dirname, entry[0]), (err, data) => {
+    if (err) {
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Erreur serveur");
+      return;
+    }
+    res.writeHead(200, { "Content-Type": entry[1], "Cache-Control": "no-cache" });
+    res.end(data);
+  });
+});
+
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
+
+// code -> { host: ws, players: Set<ws> }
+const rooms = new Map();
+
+function send(ws, payload) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+function sendError(ws, code, message) {
+  send(ws, { kind: "system", type: "ROOM_ERROR", code, message });
+}
+
+function enterRoom(ws, msg) {
+  const code = String(msg.room || "").toUpperCase();
+  const playerId = String(msg.playerId || "").slice(0, 40);
+
+  if (!/^QPC-\d{4}$/.test(code) || !playerId) {
+    sendError(ws, "BAD", "Code de salon invalide.");
+    return;
+  }
+
+  if (msg.kind === "create") {
+    if (rooms.has(code)) {
+      sendError(ws, "EXISTS", "Ce code est déjà utilisé.");
+      return;
+    }
+    rooms.set(code, { host: ws, players: new Set() });
+    ws.isHost = true;
+  } else {
+    const room = rooms.get(code);
+    if (!room) {
+      sendError(ws, "NOT_FOUND", "Salon introuvable. Vérifie le code et que l'hôte est connecté.");
+      return;
+    }
+    if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+      sendError(ws, "FULL", "Ce salon est complet.");
+      return;
+    }
+    room.players.add(ws);
+    ws.isHost = false;
+  }
+
+  ws.room = code;
+  ws.playerId = playerId;
+  send(ws, { kind: "system", type: "ROOM_OK" });
+}
+
+function leaveRoom(ws) {
+  if (!ws.room) return;
+  const code = ws.room;
+  const room = rooms.get(code);
+  ws.room = null;
+  if (!room) return;
+
+  if (room.host === ws) {
+    // L'hôte part : le salon est fermé
+    rooms.delete(code);
+    for (const player of room.players) {
+      send(player, { kind: "system", type: "HOST_LEFT" });
+      player.room = null;
+      player.close();
+    }
+  } else {
+    room.players.delete(ws);
+    send(room.host, { kind: "relay", data: { type: "PLAYER_LEAVE", playerId: ws.playerId } });
+  }
+}
+
+function relay(ws, data) {
+  const room = rooms.get(ws.room);
+  if (!room || !data || typeof data.type !== "string") return;
+
+  if (ws === room.host) {
+    // L'hôte → tous les joueurs
+    for (const player of room.players) {
+      send(player, { kind: "relay", data });
+    }
+    return;
+  }
+
+  // Joueur → hôte uniquement. Le serveur impose l'identité (anti-usurpation).
+  if (data.type === "ROOM_STATE_SYNC") return;
+  if ("playerId" in data) data.playerId = ws.playerId;
+  if (data.player && typeof data.player === "object") data.player.id = ws.playerId;
+  send(room.host, { kind: "relay", data });
+}
+
+wss.on("connection", (ws) => {
+  ws.isAlive = true;
+  ws.room = null;
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
+
+  ws.on("message", (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg !== "object") return;
+
+    if (!ws.room) {
+      if (msg.kind === "create" || msg.kind === "join") enterRoom(ws, msg);
+      return;
+    }
+
+    if (msg.kind === "relay" && msg.data && typeof msg.data === "object") {
+      relay(ws, msg.data);
+    }
+  });
+
+  ws.on("close", () => leaveRoom(ws));
+  ws.on("error", () => {});
+});
+
+// Détecte les connexions mortes et garde les connexions ouvertes derrière les proxys
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) {
+      ws.terminate();
+      return;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Serveur prêt sur http://localhost:${PORT}`);
+});
