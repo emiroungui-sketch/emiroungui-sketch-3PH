@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Questions pour un Champion — Mode Buzzer & Minuteur</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <h1>Questions pour un Champion</h1>
+      <p class="subtitle">Salon à distance • 1 appareil par joueur • Buzzer & Minuteur</p>
+      <div id="room-status-bar" class="room-status-bar" hidden>
+        <span>Salon : <strong id="header-room-code">----</strong></span>
+        <span id="connection-badge" class="status-pill">Connecté</span>
+      </div>
+    </header>
+
+    <!-- ÉCRAN 1 : CONNEXION / CRÉATION OU REJOINDRE UN SALON -->
+    <section id="connect-screen" class="card">
+      <h2>Rejoindre ou créer un salon</h2>
+
+      <div class="form-group">
+        <label for="pseudo-input">Ton pseudo</label>
+        <input type="text" id="pseudo-input" placeholder="Ex. Enzo" maxlength="20" />
+      </div>
+
+      <!-- Personnalisation : personnage + buzzer -->
+      <div class="form-group">
+        <label>Ton personnage</label>
+        <div id="avatar-picker" class="avatar-picker"></div>
+      </div>
+
+      <div class="customizer-grid">
+        <div class="form-group">
+          <label>Couleur du buzzer</label>
+          <div id="buzzer-color-picker" class="swatch-row"></div>
+        </div>
+        <div class="form-group">
+          <label for="buzzer-shape-select">Forme</label>
+          <select id="buzzer-shape-select">
+            <option value="round">Rond</option>
+            <option value="square">Carré arrondi</option>
+            <option value="hexagon">Hexagone</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="buzzer-sound-select">Son</label>
+          <div class="join-row">
+            <select id="buzzer-sound-select"></select>
+            <button type="button" id="test-sound-btn" class="btn btn-secondary">Tester</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="buzzer-preview-wrap">
+        <button type="button" id="buzzer-preview" class="buzzer-btn buzzer-preview">BUZZER !</button>
+      </div>
+
+      <div class="connect-grid">
+        <div class="connect-box">
+          <h3>Créer un salon</h3>
+          <p class="hint">Génère un code à partager à tes amis sur leurs appareils.</p>
+          <button type="button" id="create-room-btn" class="btn btn-primary full-width">
+            Créer un salon
+          </button>
+        </div>
+
+        <div class="connect-box">
+          <h3>Rejoindre un salon</h3>
+          <p class="hint">Entre le code du salon affiché par l'hôte.</p>
+          <div class="join-row">
+            <input
+              type="text"
+              id="join-code-input"
+              placeholder="Ex. QPC-7391"
+              maxlength="10"
+            />
+            <button type="button" id="join-room-btn" class="btn btn-secondary">
+              Rejoindre
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="connect-error" class="error-msg" hidden></div>
+    </section>
+
+    <!-- ÉCRAN 2 : SALLE D'ATTENTE & PARAMÉTRAGE DU SALON -->
+    <section id="lobby-screen" class="card" hidden>
+      <div class="lobby-header">
+        <div>
+          <h2>Salle d'attente</h2>
+          <p class="hint">Partage ce code pour que chaque joueur rejoigne depuis son appareil :</p>
+        </div>
+        <div class="room-code-box">
+          <span id="lobby-room-code">QPC-0000</span>
+          <button type="button" id="copy-code-btn" class="btn btn-secondary btn-sm">
+            Copier
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Joueurs connectés (<span id="connected-count">0</span>)</label>
+        <ul id="lobby-players-list" class="players-list"></ul>
+      </div>
+
+      <hr class="divider" />
+
+      <h3>Paramètres de la partie</h3>
+      <p id="host-only-note" class="hint" hidden>
+        Seul l'hôte du salon peut modifier les paramètres avant le lancement.
+      </p>
+
+      <div id="settings-fields">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="difficulte">Difficulté</label>
+            <select id="difficulte">
+              <option value="tous">Toutes difficultés</option>
+              <option value="facile">Facile</option>
+              <option value="standard" selected>Standard</option>
+              <option value="expert">Expert</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="points-bonne-reponse">Points par bonne réponse</label>
+            <input type="number" id="points-bonne-reponse" min="1" max="1000" value="100" />
+          </div>
+
+          <div class="form-group">
+            <label for="penalite-mauvaise-reponse">Pénalité mauvaise réponse</label>
+            <input type="number" id="penalite-mauvaise-reponse" min="0" max="1000" value="50" />
+          </div>
+
+          <div class="form-group">
+            <label for="duree-minuteur">Minuteur (secondes)</label>
+            <input type="number" id="duree-minuteur" min="5" max="120" value="15" />
+          </div>
+
+          <div class="form-group">
+            <label for="nb-questions">Nombre de questions</label>
+            <input type="number" id="nb-questions" min="1" max="10" value="4" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Manches actives</label>
+          <div class="checkbox-group">
+            <label class="checkbox-item">
+              <input type="checkbox" id="manche-9pg" checked />
+              9 Points Gagnants
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="manche-4s" checked />
+              4 à la suite
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" id="manche-faf" checked />
+              Face-à-Face
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Thèmes</label>
+          <div class="checkbox-group" id="themes-group">
+            <label class="checkbox-item">
+              <input type="checkbox" value="Culture générale" checked />
+              Culture générale
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="Histoire" checked />
+              Histoire
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="Sciences" checked />
+              Sciences
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="Géographie" checked />
+              Géographie
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="lobby-error" class="error-msg" hidden></div>
+
+      <div class="actions">
+        <button type="button" id="start-btn" class="btn btn-primary">
+          Lancer la partie pour tous
+        </button>
+        <button type="button" id="leave-room-btn" class="btn btn-secondary">
+          Quitter le salon
+        </button>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 3 : JEU EN COURS AVEC BUZZER & MINUTEUR -->
+    <section id="game-screen" class="card" hidden>
+      <div class="game-topbar">
+        <span id="question-counter" class="badge">Question 1 / 4</span>
+        <span id="manche-badge" class="badge badge-accent">9 Points Gagnants</span>
+        <span id="theme-badge" class="badge">Histoire</span>
+        <span id="buzzer-status-badge" class="badge">Buzzer prêt</span>
+      </div>
+
+      <!-- Barre et affichage du minuteur -->
+      <div class="timer-box">
+        <div class="timer-header">
+          <span>Temps restant</span>
+          <strong id="timer-display" class="timer-value">15s</strong>
+        </div>
+        <div class="timer-track">
+          <div id="timer-fill" class="timer-fill"></div>
+        </div>
+      </div>
+
+      <div class="question-box">
+        <h2 id="question-text">Chargement de la question...</h2>
+      </div>
+
+      <!-- Zone Buzzer -->
+      <div id="buzzer-zone" class="buzzer-zone">
+        <button type="button" id="buzzer-btn" class="buzzer-btn">
+          BUZZER !
+        </button>
+        <p id="buzzer-hint" class="buzzer-hint">
+          Sois le premier à buzzer pour répondre !
+        </p>
+      </div>
+
+      <!-- Zone de réponse active pour celui qui a buzzé -->
+      <div id="active-answer-zone" class="answer-box" hidden>
+        <p id="active-buzzer-banner" class="buzzer-winner-banner"></p>
+        <div id="options-container" class="options-grid"></div>
+      </div>
+
+      <!-- Feedback de la tentative / fin de question -->
+      <div id="feedback-box" class="feedback-box" hidden>
+        <p id="feedback-text" class="feedback-text"></p>
+        <p id="reveal-answer-text" class="reveal-answer" hidden></p>
+      </div>
+
+      <!-- Classement synchronisé du salon -->
+      <div class="leaderboard-box">
+        <h3>Classement du salon</h3>
+        <ul id="leaderboard-list" class="leaderboard-list"></ul>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="next-btn" class="btn btn-primary" hidden>
+          Question suivante
+        </button>
+        <button type="button" id="leave-game-btn" class="btn btn-secondary">
+          Quitter le salon
+        </button>
+      </div>
+    </section>
+
+    <!-- ÉCRAN 4 : FIN DE PARTIE -->
+    <section id="end-screen" class="card" hidden>
+      <h2>Partie terminée !</h2>
+      <p id="winner-announcement" class="winner-text"></p>
+
+      <div class="leaderboard-box">
+        <h3>Classement final</h3>
+        <ul id="final-leaderboard-list" class="leaderboard-list"></ul>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="replay-btn" class="btn btn-primary">
+          Rejouer dans ce salon
+        </button>
+        <button type="button" id="back-to-lobby-btn" class="btn btn-secondary">
+          Retour à la salle d'attente
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
